@@ -40,6 +40,12 @@ class SunTimes(BaseModel):
     dusk: Optional[datetime] = None
     day_length_seconds: Optional[int] = None
     is_daylight_now: Optional[bool] = None
+    civil_dawn: Optional[datetime] = None
+    civil_dusk: Optional[datetime] = None
+    nautical_dawn: Optional[datetime] = None
+    nautical_dusk: Optional[datetime] = None
+    astronomical_dawn: Optional[datetime] = None
+    astronomical_dusk: Optional[datetime] = None
 
 
 class MoonInfo(BaseModel):

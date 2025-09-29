@@ -123,9 +123,9 @@ def compute_sun_times(
     lat: float, lon: float, tz_name: str, on_date: date, elevation_m: float
 ) -> SunTimes:
     """
-    Uses Astral to compute dawn, sunrise, solar noon, sunset, dusk for a location/date.
-    Astral’s dawn/dusk are civil twilight by default (sun at -6°).
-    Handles polar edge-cases by returning None where events do not occur.
+    Uses Astral to compute sun event times for a location/date, including
+    civil/nautical/astronomical twilight boundaries. Handles polar edge-cases by
+    returning None where events do not occur instead of raising.
     """
     tzinfo = ZoneInfo(tz_name)
     # Astral's LocationInfo: region/city unused; tz is critical
@@ -133,10 +133,24 @@ def compute_sun_times(
         name="Here", region="", timezone=tz_name, latitude=lat, longitude=lon
     )
     try:
-        s = sun(observer=loc.observer, date=on_date, tzinfo=tzinfo)
+        base = sun(observer=loc.observer, date=on_date, tzinfo=tzinfo)
+        civil = base  # Astral default: civil twilight (sun at -6°)
+        nautical = sun(
+            observer=loc.observer,
+            date=on_date,
+            tzinfo=tzinfo,
+            dawn_dusk_depression=12,
+        )
+        astronomical = sun(
+            observer=loc.observer,
+            date=on_date,
+            tzinfo=tzinfo,
+            dawn_dusk_depression=18,
+        )
+
         # day length might be negative/KeyError at poles; calculate defensively
-        sunrise = s.get("sunrise")
-        sunset = s.get("sunset")
+        sunrise = civil.get("sunrise")
+        sunset = civil.get("sunset")
         day_len = (
             int((sunset - sunrise).total_seconds()) if sunrise and sunset else None
         )
@@ -149,13 +163,19 @@ def compute_sun_times(
         return SunTimes(
             timezone=tz_name,
             date=on_date,
-            dawn=s.get("dawn"),
+            dawn=civil.get("dawn"),
             sunrise=sunrise,
-            solar_noon=s.get("noon"),
+            solar_noon=civil.get("noon"),
             sunset=sunset,
-            dusk=s.get("dusk"),
+            dusk=civil.get("dusk"),
             day_length_seconds=day_len,
             is_daylight_now=is_day,
+            civil_dawn=civil.get("dawn"),
+            civil_dusk=civil.get("dusk"),
+            nautical_dawn=nautical.get("dawn"),
+            nautical_dusk=nautical.get("dusk"),
+            astronomical_dawn=astronomical.get("dawn"),
+            astronomical_dusk=astronomical.get("dusk"),
         )
     except Exception as e:
         logger.exception("Astral sun computation failed: %s", e)
