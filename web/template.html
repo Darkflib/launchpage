@@ -1845,12 +1845,11 @@
         }
 
         function updateWeatherDisplay(data) {
-            // Use metric (Celsius) by default
-            const tempUnit = '°C';
+            // Display both Celsius and Fahrenheit
             const windUnit = ' km/h';
 
-            document.getElementById('temperature').textContent = `${Math.round(data.current.temp_c)}${tempUnit}`;
-            document.getElementById('feels-like').textContent = `${Math.round(data.current.feels_like_c)}${tempUnit}`;
+            document.getElementById('temperature').textContent = `${Math.round(data.current.temp_c)}°C (${Math.round(data.current.temp_f)}°F)`;
+            document.getElementById('feels-like').textContent = `${Math.round(data.current.feels_like_c)}°C (${Math.round(data.current.feels_like_f)}°F)`;
             document.getElementById('weather-condition').textContent = data.current.condition.text;
 
             // Set weather icon (add https: prefix if missing)
@@ -1859,22 +1858,38 @@
                 : data.current.condition.icon;
             document.getElementById('weather-icon').src = iconUrl;
 
+            // Calculate wind conversions
+            const windKph = Math.round(data.current.wind_kph);
+            const windMph = Math.round(data.current.wind_mph);
+            const windKnots = Math.round(data.current.wind_kph * 0.539957);
+
+            // Calculate pressure in inHg (1 mb = 0.02953 inHg)
+            const pressureMb = Math.round(data.current.pressure_mb);
+            const pressureInHg = (data.current.pressure_mb * 0.02953).toFixed(2);
+
             document.getElementById('humidity').textContent = `${data.current.humidity}%`;
-            document.getElementById('wind').textContent = `${Math.round(data.current.wind_kph)}${windUnit} ${data.current.wind_dir}`;
-            document.getElementById('pressure').textContent = `${Math.round(data.current.pressure_mb)} mb`;
+
+            const windEl = document.getElementById('wind');
+            windEl.textContent = `${windKph}${windUnit} ${data.current.wind_dir}`;
+            windEl.title = `Wind: ${windKph} km/h • ${windMph} mph • ${windKnots} knots`;
+
+            const pressureEl = document.getElementById('pressure');
+            pressureEl.textContent = `${pressureMb} mb`;
+            pressureEl.title = `Pressure: ${pressureMb} mb • ${pressureInHg} inHg`;
+
             document.getElementById('precipitation').textContent = `${data.current.precip_mm} mm`;
             document.getElementById('uv-index').textContent = data.current.uv;
 
             // Update forecast if available
             if (data.forecast && data.forecast.days && data.forecast.days.length > 0) {
-                updateForecastDisplay(data.forecast.days, tempUnit);
+                updateForecastDisplay(data.forecast.days);
                 document.getElementById('weather-forecast').style.display = 'block';
             } else {
                 document.getElementById('weather-forecast').style.display = 'none';
             }
         }
 
-        function updateForecastDisplay(forecastDays, tempUnit) {
+        function updateForecastDisplay(forecastDays) {
             const forecastContainer = document.getElementById('forecast-days');
             forecastContainer.innerHTML = '';
 
@@ -1887,6 +1902,10 @@
                     ? `https:${day.condition.icon}`
                     : day.condition.icon;
 
+                // Calculate wind in mph and knots
+                const windMph = Math.round(day.max_wind_mph);
+                const windKnots = Math.round(day.max_wind_kph * 0.539957);
+
                 const forecastCard = document.createElement('div');
                 forecastCard.className = 'forecast-day';
                 forecastCard.innerHTML = `
@@ -1894,22 +1913,22 @@
                     <div class="forecast-icon">
                         <img src="${iconUrl}" alt="${day.condition.text}">
                     </div>
-                    <div class="forecast-temp">${Math.round(day.avg_temp_c)}${tempUnit}</div>
+                    <div class="forecast-temp" title="Average temperature">${Math.round(day.avg_temp_c)}°C (${Math.round(day.avg_temp_f)}°F)</div>
                     <div class="forecast-temp-range">
-                        <i class="fas fa-arrow-up" style="color: #dc3545;"></i> ${Math.round(day.max_temp_c)}${tempUnit}
-                        <i class="fas fa-arrow-down" style="color: #4a6fa5;"></i> ${Math.round(day.min_temp_c)}${tempUnit}
+                        <i class="fas fa-arrow-up" style="color: #dc3545;" title="High temperature"></i> ${Math.round(day.max_temp_c)}°C
+                        <i class="fas fa-arrow-down" style="color: #4a6fa5;" title="Low temperature"></i> ${Math.round(day.min_temp_c)}°C
                     </div>
                     <div class="forecast-condition">${day.condition.text}</div>
                     <div class="forecast-detail">
-                        <div class="forecast-detail-item">
+                        <div class="forecast-detail-item" title="Average humidity">
                             <i class="fas fa-tint"></i>
                             <span>${day.avg_humidity}%</span>
                         </div>
-                        <div class="forecast-detail-item">
+                        <div class="forecast-detail-item" title="Chance of rain">
                             <i class="fas fa-cloud-rain"></i>
                             <span>${day.daily_chance_of_rain}%</span>
                         </div>
-                        <div class="forecast-detail-item">
+                        <div class="forecast-detail-item" title="Max wind: ${Math.round(day.max_wind_kph)} km/h • ${windMph} mph • ${windKnots} knots">
                             <i class="fas fa-wind"></i>
                             <span>${Math.round(day.max_wind_kph)}</span>
                         </div>
