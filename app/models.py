@@ -67,6 +67,8 @@ class MoonInfo(BaseModel):
     elevation_series: Optional[Dict[str, float]] = None
     next_new_moon: Optional[Date] = None
     next_full_moon: Optional[Date] = None
+    moonrise: Optional[datetime] = None
+    moonset: Optional[datetime] = None
 
 
 class AstroResponse(BaseModel):

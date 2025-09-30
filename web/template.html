@@ -27,6 +27,30 @@
             --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             --border-radius: 12px;
             --transition: all 0.3s ease;
+            --body-bg: linear-gradient(135deg, #1a2a6c, #2c3e50);
+            --text-primary: #f8f9fa;
+            --text-secondary: #6c757d;
+            --text-card: #2c3e50;
+            --border-color: rgba(0, 0, 0, 0.1);
+            --input-bg: rgba(255, 255, 255, 0.9);
+            --input-text: #2c3e50;
+        }
+
+        [data-theme="dark"] {
+            --primary: #6b8cbc;
+            --secondary: #8ba8cc;
+            --accent: #ffb088;
+            --card-bg: #1e2936;
+            --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            --body-bg: linear-gradient(135deg, #0a0e1a, #1a1f2e);
+            --text-primary: #e8eaed;
+            --text-secondary: #9ca3af;
+            --text-card: #e8eaed;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --input-bg: rgba(30, 41, 54, 0.9);
+            --input-text: #e8eaed;
+            --dark: #e8eaed;
+            --light: #e8eaed;
         }
 
         * {
@@ -37,10 +61,11 @@
         }
 
         body {
-            background: linear-gradient(135deg, #1a2a6c, #2c3e50);
-            color: var(--light);
+            background: var(--body-bg);
+            color: var(--text-primary);
             min-height: 100vh;
             padding: 20px;
+            transition: background 0.3s ease, color 0.3s ease;
         }
 
         .container {
@@ -110,7 +135,7 @@
             border-radius: var(--border-radius);
             box-shadow: var(--card-shadow);
             padding: 25px;
-            color: var(--dark);
+            color: var(--text-card);
             transition: var(--transition);
         }
 
@@ -182,14 +207,14 @@
 
         .info-label {
             font-size: 0.9rem;
-            color: #6c757d;
+            color: var(--text-secondary);
             margin-bottom: 5px;
         }
 
         .info-value {
             font-size: 1.2rem;
             font-weight: 600;
-            color: var(--dark);
+            color: var(--text-card);
         }
 
         .info-value.large {
@@ -497,8 +522,9 @@
         .input-group input, .input-group select {
             padding: 12px 15px;
             border-radius: 8px;
-            border: none;
-            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid var(--border-color);
+            background: var(--input-bg);
+            color: var(--input-text);
             font-size: 1rem;
         }
 
@@ -824,6 +850,26 @@
         .last-updated i {
             margin-right: 4px;
         }
+
+        .theme-toggle {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--transition);
+            color: var(--text-primary);
+            font-size: 1.2rem;
+        }
+
+        .theme-toggle:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: rotate(20deg);
+        }
     </style>
 </head>
 <body>
@@ -833,9 +879,14 @@
                 <i class="fas fa-moon"></i>
                 <h1>Astro API Dashboard</h1>
             </div>
-            <div class="health-status">
-                <div class="health-dot"></div>
-                <span>API Status: Healthy</span>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">
+                    <i class="fas fa-sun" id="theme-icon"></i>
+                </button>
+                <div class="health-status">
+                    <div class="health-dot"></div>
+                    <span>API Status: Healthy</span>
+                </div>
             </div>
         </header>
 
@@ -1150,6 +1201,14 @@
                         </div>
                     </div>
                     <div class="info-item">
+                        <div class="info-label">Moonrise</div>
+                        <div class="info-value" id="moonrise">--:--</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Moonset</div>
+                        <div class="info-value" id="moonset">--:--</div>
+                    </div>
+                    <div class="info-item">
                         <div class="info-label">Next New Moon</div>
                         <div class="info-value" id="next-new-moon">2024-10-15</div>
                     </div>
@@ -1203,9 +1262,37 @@
         const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours for sun/moon data
         const WEATHER_REFRESH_MS = 15 * 60 * 1000; // 15 minutes for weather data
 
+        // Dark mode initialization
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            updateThemeIcon(savedTheme);
+        }
+
+        function updateThemeIcon(theme) {
+            const icon = document.getElementById('theme-icon');
+            if (theme === 'dark') {
+                icon.className = 'fas fa-sun';
+            } else {
+                icon.className = 'fas fa-moon';
+            }
+        }
+
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
             initDashboard();
             startClock();
+
+            // Add theme toggle event listener
+            document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
         });
 
         function saveToCache(data) {
@@ -1607,6 +1694,10 @@
             const illuminationPercent = Math.round((data.moon.illumination_fraction_est || 0) * 100);
             document.getElementById('illumination-percent').textContent = `${illuminationPercent}%`;
             document.getElementById('illumination-fill').style.width = `${illuminationPercent}%`;
+
+            // Update moonrise and moonset
+            document.getElementById('moonrise').textContent = formatTime(data.moon.moonrise);
+            document.getElementById('moonset').textContent = formatTime(data.moon.moonset);
 
             // Update next moon phases
             document.getElementById('next-new-moon').textContent = formatDate(data.moon.next_new_moon);

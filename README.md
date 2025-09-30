@@ -8,22 +8,26 @@ A FastAPI application with an interactive dashboard that provides astronomical a
 - **Sun times**: Dawn, sunrise, solar noon, sunset, dusk with civil/nautical/astronomical twilight
 - **Golden & blue hours**: Photography-optimized time windows
 - **Moon phases**: Current phase, illumination fraction, next new/full moon dates
+- **Moon rise/set times**: Daily moonrise and moonset times with polar region handling
 - **Solar elevation**: Hourly elevation series for the entire day
 - **Real-time sun position**: Interactive arc visualization showing current sun position
 - **Timezone resolution**: Offline IANA timezone lookup (privacy-friendly, no external calls)
 
 ### Weather Data
-- **Current conditions**: Temperature, feels-like, humidity, wind, pressure, precipitation, UV index
+- **Current conditions**: Temperature (°C/°F), feels-like, humidity, wind (km/h, mph, knots), pressure (mb, inHg), precipitation, UV index
 - **3-day forecast**: Daily high/low temps, conditions, rain/snow chance, wind speeds
+- **Unit tooltips**: Hover over values for alternate units (wind in mph/knots, pressure in inHg)
 - **Auto-refresh**: Weather updates every 15 minutes
 - **Location-aware**: Automatically detects browser location or accepts manual coordinates
 
 ### Dashboard Features
 - **Responsive design**: Works on desktop, tablet, and mobile
+- **Dark mode**: Toggle between light and dark themes with persistent preference
 - **Real-time updates**: Clock, sun position, and "last updated" timestamps refresh every second
 - **24-hour caching**: Smart caching for astronomical data with background refresh
 - **Service links**: Customizable quick links from YAML configuration
 - **Interactive controls**: Collapsible location picker, manual coordinate entry, date selection
+- **Accessibility**: ARIA labels, keyboard navigation, and semantic HTML
 
 ## Screenshot
 
@@ -88,7 +92,8 @@ LINKS_FILE=app/sample_links.yaml
 - **`web/template.html`**: Complete dashboard with vanilla JavaScript
 - **Real-time updates**: Sun position calculated every second using cached sunrise/sunset times
 - **Smart caching**: 24-hour cache for astronomical data, 15-minute refresh for weather
-- **Local storage**: Persistent cache survives page reloads
+- **Local storage**: Persistent cache and theme preference survives page reloads
+- **Dark mode**: CSS variable-based theming with smooth transitions
 
 ### Key Libraries
 - **FastAPI**: Web framework
@@ -183,18 +188,28 @@ docker run -p 8000:8000 -e WEATHERAPI_KEY=your_key astro-api
 
 ## Edge Cases & Notes
 
-- **Polar regions**: Sun events may be `null` during polar day/night
+- **Polar regions**: Sun/moon events may be `null` during polar day/night or when celestial bodies don't rise/set
 - **Twilight**: Returns civil (-6°), nautical (-12°), and astronomical (-18°) twilight times
 - **Moon illumination**: Heuristic calculation, not precise photometry
+- **Moon rise/set**: Calculated for the specified date; may be `null` in polar regions
 - **Privacy**: Timezone resolution is 100% offline - coordinates never leave your server
 - **Caching**: Astronomical data cached for 24h, weather for 15min
+- **Theme preference**: Dark/light mode saved to localStorage
 
 ## Future Enhancements
 
 - [ ] Hourly weather forecast (currently daily only)
 - [ ] Air quality index integration
-- [ ] Moon rise/set times
 - [ ] Batch endpoint for multiple locations (`POST /astro/batch`)
 - [ ] Customizable twilight depression angles
 - [ ] Astronomy image of the day widget
-- [ ] Dark mode toggle
+- [ ] Moon arc visualization (similar to sun arc)
+- [ ] Export/share feature for astronomical data
+- [ ] Customizable units (metric/imperial toggle)
+
+## Recent Updates
+
+- ✅ **Moon rise/set times**: Added daily moonrise and moonset calculations with polar region handling
+- ✅ **Dark mode**: Full dark theme support with toggle button and localStorage persistence
+- ✅ **Weather tooltips**: Hover tooltips showing alternate units (mph, knots, inHg)
+- ✅ **Dual temperature display**: Shows both Celsius and Fahrenheit for current weather and forecasts

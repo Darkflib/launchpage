@@ -396,6 +396,24 @@ def compute_moon(
             metrics=metrics,
             prefix=f"{prefix}.elevation_series",
         )
+
+        # Calculate moonrise and moonset
+        step = perf_counter()
+        moonrise_time = None
+        moonset_time = None
+        try:
+            moonrise_time = moon.moonrise(observer, on_date, tzinfo=tzinfo)
+        except ValueError:
+            # Moon doesn't rise on this day (polar regions or circumpolar moon)
+            logger.debug("Moonrise not available for lat=%s lon=%s on %s", lat, lon, on_date)
+
+        try:
+            moonset_time = moon.moonset(observer, on_date, tzinfo=tzinfo)
+        except ValueError:
+            # Moon doesn't set on this day
+            logger.debug("Moonset not available for lat=%s lon=%s on %s", lat, lon, on_date)
+        _record_metric(metrics, f"{prefix}.rise_set_ms", step)
+
         return MoonInfo(
             phase_day_0_29=phase_day,
             phase_name=moon_phase_name(phase_day),
@@ -403,6 +421,8 @@ def compute_moon(
             elevation_series=elevation_series or None,
             next_new_moon=next_new,
             next_full_moon=next_full,
+            moonrise=moonrise_time,
+            moonset=moonset_time,
         )
     except Exception as e:
         logger.exception("Astral moon computation failed: %s", e)
