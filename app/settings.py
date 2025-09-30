@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     # Optional: where your personal links (bookmarks to services) are sourced
     links_file: str = "app/sample_links.yaml"
 
+    # Weather API settings
+    weatherapi_key: str = ""
+    weatherapi_url: str = "http://api.weatherapi.com/v1/"
+    cache_ttl_seconds: int = 3600
+
     # Safety knobs
     max_abs_lat: float = 90.0
     max_abs_lon: float = 180.0

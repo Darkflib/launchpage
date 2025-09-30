@@ -65,6 +65,8 @@ class MoonInfo(BaseModel):
     phase_name: str
     illumination_fraction_est: float = Field(..., ge=0.0, le=1.0)  # heuristic
     elevation_series: Optional[Dict[str, float]] = None
+    next_new_moon: Optional[Date] = None
+    next_full_moon: Optional[Date] = None
 
 
 class AstroResponse(BaseModel):
@@ -78,3 +80,32 @@ class AstroResponse(BaseModel):
 
 class LinksResponse(BaseModel):
     links: List[LinkItem]
+
+
+class WeatherCondition(BaseModel):
+    text: str
+    icon: str
+    code: int
+
+
+class WeatherCurrent(BaseModel):
+    temp_c: float
+    temp_f: float
+    feels_like_c: float
+    feels_like_f: float
+    humidity: int
+    wind_kph: float
+    wind_mph: float
+    wind_dir: str
+    pressure_mb: float
+    precip_mm: float
+    condition: WeatherCondition
+    uv: float
+
+
+class WeatherResponse(BaseModel):
+    location: str
+    region: Optional[str] = None
+    country: str
+    localtime: str
+    current: WeatherCurrent

@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Astro API Dashboard</title>
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/x-icon" href="/favicons/favicon.ico">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicons/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicons/favicon-32x32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicons/apple-touch-icon.png">
+    <link rel="manifest" href="/favicons/site.webmanifest">
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -601,6 +609,118 @@
             color: rgba(255, 255, 255, 0.7);
             font-size: 0.9rem;
         }
+
+        .collapsible-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: var(--border-radius);
+            margin-bottom: 25px;
+            overflow: hidden;
+            transition: var(--transition);
+        }
+
+        .collapsible-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            cursor: pointer;
+            user-select: none;
+            transition: var(--transition);
+        }
+
+        .collapsible-header:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .collapsible-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--light);
+        }
+
+        .collapsible-icon {
+            transition: transform 0.3s ease;
+            color: var(--accent);
+        }
+
+        .collapsible-icon.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        .collapsible-content {
+            max-height: 500px;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+            padding: 0 20px 20px 20px;
+        }
+
+        .collapsible-content.collapsed {
+            max-height: 0;
+            padding: 0 20px;
+        }
+
+        .weather-card .card-icon {
+            background: linear-gradient(135deg, #87ceeb, #4a90e2);
+            color: white;
+        }
+
+        .weather-main {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .weather-temp {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .weather-icon img {
+            width: 64px;
+            height: 64px;
+        }
+
+        .temp-display {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .weather-condition {
+            font-size: 1.1rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+
+        .weather-details {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .weather-detail-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .weather-detail-item i {
+            color: var(--primary);
+            width: 20px;
+        }
+
+        .weather-detail-label {
+            color: #6c757d;
+            margin-right: 5px;
+        }
+
+        .weather-detail-value {
+            font-weight: 600;
+            color: var(--dark);
+        }
     </style>
 </head>
 <body>
@@ -616,22 +736,32 @@
             </div>
         </header>
 
-        <div class="controls">
-            <div class="input-group">
-                <label for="latitude">Latitude</label>
-                <input type="number" id="latitude" placeholder="e.g., 40.7128" step="0.0001" value="40.7128">
+        <div class="collapsible-section">
+            <div class="collapsible-header" id="location-toggle">
+                <div class="collapsible-title">
+                    <i class="fas fa-map-marker-alt"></i> Custom Location
+                </div>
+                <i class="fas fa-chevron-down collapsible-icon collapsed" id="location-icon"></i>
             </div>
-            <div class="input-group">
-                <label for="longitude">Longitude</label>
-                <input type="number" id="longitude" placeholder="e.g., -74.0060" step="0.0001" value="-74.0060">
+            <div class="collapsible-content collapsed" id="location-form">
+                <div class="controls">
+                    <div class="input-group">
+                        <label for="latitude">Latitude</label>
+                        <input type="number" id="latitude" placeholder="e.g., 40.7128" step="0.0001" value="40.7128">
+                    </div>
+                    <div class="input-group">
+                        <label for="longitude">Longitude</label>
+                        <input type="number" id="longitude" placeholder="e.g., -74.0060" step="0.0001" value="-74.0060">
+                    </div>
+                    <div class="input-group">
+                        <label for="date">Date (optional)</label>
+                        <input type="date" id="date">
+                    </div>
+                    <button class="btn btn-primary" id="fetch-data">
+                        <i class="fas fa-sync-alt"></i> Update
+                    </button>
+                </div>
             </div>
-            <div class="input-group">
-                <label for="date">Date (optional)</label>
-                <input type="date" id="date">
-            </div>
-            <button class="btn btn-primary" id="fetch-data">
-                <i class="fas fa-sync-alt"></i> Update
-            </button>
         </div>
 
         <div class="current-location">
@@ -678,6 +808,58 @@
                     <div class="info-item">
                         <div class="info-label">Timezone</div>
                         <div class="info-value" id="timezone-display">America/New_York</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card weather-card">
+                <div class="card-header">
+                    <div class="card-title">Weather</div>
+                    <div class="card-icon">
+                        <i class="fas fa-cloud-sun"></i>
+                    </div>
+                </div>
+                <div class="weather-main">
+                    <div class="weather-temp">
+                        <div class="weather-icon">
+                            <img id="weather-icon" src="" alt="Weather">
+                        </div>
+                        <div>
+                            <div class="temp-display" id="temperature">--°</div>
+                            <div class="weather-condition" id="weather-condition">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="weather-details">
+                    <div class="weather-detail-item">
+                        <i class="fas fa-temperature-high"></i>
+                        <span class="weather-detail-label">Feels like:</span>
+                        <span class="weather-detail-value" id="feels-like">--°</span>
+                    </div>
+                    <div class="weather-detail-item">
+                        <i class="fas fa-tint"></i>
+                        <span class="weather-detail-label">Humidity:</span>
+                        <span class="weather-detail-value" id="humidity">--%</span>
+                    </div>
+                    <div class="weather-detail-item">
+                        <i class="fas fa-wind"></i>
+                        <span class="weather-detail-label">Wind:</span>
+                        <span class="weather-detail-value" id="wind">-- km/h</span>
+                    </div>
+                    <div class="weather-detail-item">
+                        <i class="fas fa-compress-arrows-alt"></i>
+                        <span class="weather-detail-label">Pressure:</span>
+                        <span class="weather-detail-value" id="pressure">-- mb</span>
+                    </div>
+                    <div class="weather-detail-item">
+                        <i class="fas fa-cloud-rain"></i>
+                        <span class="weather-detail-label">Precip:</span>
+                        <span class="weather-detail-value" id="precipitation">-- mm</span>
+                    </div>
+                    <div class="weather-detail-item">
+                        <i class="fas fa-sun"></i>
+                        <span class="weather-detail-label">UV Index:</span>
+                        <span class="weather-detail-value" id="uv-index">--</span>
                     </div>
                 </div>
             </div>
@@ -850,6 +1032,14 @@
                             </div>
                         </div>
                     </div>
+                    <div class="info-item">
+                        <div class="info-label">Next New Moon</div>
+                        <div class="info-value" id="next-new-moon">2024-10-15</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Next Full Moon</div>
+                        <div class="info-value" id="next-full-moon">2024-10-30</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -878,24 +1068,120 @@
         const errorContainer = document.getElementById('error-container');
         const linksContainer = document.getElementById('links-container');
         const currentLocationLabel = document.querySelector('.current-location span');
-        const fetchIntervalMs = 30000;
 
         let refreshTimerId = null;
         let isFetching = false;
 
-        let currentTimezoneOffset = 0;
+        let currentTimezone = null;
         let clockInterval = null;
+        let weatherRefreshTimer = null;
+        const CACHE_KEY = 'astro_dashboard_cache';
+        const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours for sun/moon data
+        const WEATHER_REFRESH_MS = 15 * 60 * 1000; // 15 minutes for weather data
 
         document.addEventListener('DOMContentLoaded', () => {
             initDashboard();
             startClock();
         });
 
+        function saveToCache(data) {
+            try {
+                const cacheEntry = {
+                    data: data,
+                    timestamp: Date.now(),
+                    lat: data.query.lat,
+                    lon: data.query.lon,
+                    date: data.sun.date
+                };
+                localStorage.setItem(CACHE_KEY, JSON.stringify(cacheEntry));
+            } catch (e) {
+                console.warn('Failed to save to localStorage:', e);
+            }
+        }
+
+        function loadFromCache() {
+            try {
+                const cached = localStorage.getItem(CACHE_KEY);
+                if (!cached) {
+                    return null;
+                }
+                const cacheEntry = JSON.parse(cached);
+                const age = Date.now() - cacheEntry.timestamp;
+
+                // Return cached data even if stale - we'll update it in the background
+                // But mark it as stale if older than cache duration
+                if (age < CACHE_DURATION_MS) {
+                    return { data: cacheEntry.data, fresh: true };
+                } else {
+                    return { data: cacheEntry.data, fresh: false };
+                }
+            } catch (e) {
+                console.warn('Failed to load from localStorage:', e);
+                return null;
+            }
+        }
+
+        function shouldRefetchAstroData() {
+            try {
+                const cached = localStorage.getItem(CACHE_KEY);
+                if (!cached) {
+                    return true; // No cache, need to fetch
+                }
+
+                const cacheEntry = JSON.parse(cached);
+                const currentLat = parseFloat(document.getElementById('latitude').value);
+                const currentLon = parseFloat(document.getElementById('longitude').value);
+                const currentDate = document.getElementById('date').value;
+                const todayDate = new Date().toISOString().split('T')[0];
+
+                // Check if location changed significantly (more than 0.01 degrees ~ 1km)
+                const latDiff = Math.abs(cacheEntry.lat - currentLat);
+                const lonDiff = Math.abs(cacheEntry.lon - currentLon);
+                if (latDiff > 0.01 || lonDiff > 0.01) {
+                    return true;
+                }
+
+                // Check if date changed (user selected different date)
+                const targetDate = currentDate || todayDate;
+                if (cacheEntry.date !== targetDate) {
+                    return true;
+                }
+
+                // Check if cache is older than 24 hours
+                const age = Date.now() - cacheEntry.timestamp;
+                if (age > CACHE_DURATION_MS) {
+                    return true;
+                }
+
+                // Check if we've crossed midnight (need new sun/moon data for today)
+                const cachedDate = new Date(cacheEntry.timestamp).toISOString().split('T')[0];
+                if (cachedDate !== todayDate && !currentDate) {
+                    return true;
+                }
+
+                return false; // Cache is valid
+            } catch (e) {
+                console.warn('Error checking cache validity:', e);
+                return true; // On error, fetch new data
+            }
+        }
+
         async function initDashboard() {
             setDefaultDate();
             attachEventHandlers();
 
             currentLocationLabel.textContent = 'Detecting current location…';
+
+            // Load cached data immediately if available
+            const cached = loadFromCache();
+            if (cached) {
+                console.log('Loading from cache', cached.fresh ? '(fresh)' : '(stale)');
+                updateDashboard(cached.data);
+                // Update location inputs from cached data
+                if (cached.data.query) {
+                    updateLocationInputs(cached.data.query.lat, cached.data.query.lon);
+                }
+            }
 
             await loadServiceLinks();
 
@@ -907,9 +1193,20 @@
                 currentLocationLabel.textContent = formatManualLocationText();
             }
 
-            await fetchAstroData({ suppressError: true });
+            // Fetch fresh data only if cache is invalid
+            if (shouldRefetchAstroData()) {
+                console.log('Cache invalid or stale, fetching fresh data');
+                await fetchAstroData({ suppressError: true });
+            } else {
+                console.log('Using cached data, no fetch needed');
+            }
 
-            startAutoRefresh();
+            // Fetch weather data and start auto-refresh
+            await fetchWeatherData();
+            startWeatherRefresh();
+
+            // Don't auto-refresh astro data - we have 24h cache and manual update button
+            // startAutoRefresh();
         }
 
         function setDefaultDate() {
@@ -918,7 +1215,20 @@
         }
 
         function attachEventHandlers() {
-            fetchDataBtn.addEventListener('click', () => fetchAstroData());
+            fetchDataBtn.addEventListener('click', () => {
+                fetchAstroData();
+                fetchWeatherData(); // Also update weather when user clicks Update
+            });
+
+            // Collapsible location form
+            const locationToggle = document.getElementById('location-toggle');
+            const locationForm = document.getElementById('location-form');
+            const locationIcon = document.getElementById('location-icon');
+
+            locationToggle.addEventListener('click', () => {
+                locationForm.classList.toggle('collapsed');
+                locationIcon.classList.toggle('collapsed');
+            });
         }
 
         async function requestBrowserLocation() {
@@ -995,6 +1305,7 @@
 
                 const data = await response.json();
                 updateDashboard(data);
+                saveToCache(data); // Save to cache for next load
                 errorContainer.innerHTML = '';
             } catch (error) {
                 console.error('Failed to fetch astro data', error);
@@ -1032,16 +1343,43 @@
         }
 
         function updateClock() {
-            const now = new Date();
-            document.getElementById('local-time').textContent = now.toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
+            // If we have a timezone from the API, use it for display
+            // Otherwise fall back to local time
+            if (currentTimezone) {
+                try {
+                    const now = new Date();
+                    const timeStr = now.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        timeZone: currentTimezone,
+                        hour12: false
+                    });
+                    document.getElementById('local-time').textContent = timeStr;
+                } catch (e) {
+                    // Fallback to local time if timezone is invalid
+                    const now = new Date();
+                    document.getElementById('local-time').textContent = now.toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+                }
+            } else {
+                const now = new Date();
+                document.getElementById('local-time').textContent = now.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            }
         }
 
         function updateDashboard(data) {
             const now = new Date(data.now_local);
+
+            // Store timezone for clock updates
+            currentTimezone = data.timezone;
 
             // Update date display
             const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
@@ -1096,6 +1434,10 @@
             const illuminationPercent = Math.round((data.moon.illumination_fraction_est || 0) * 100);
             document.getElementById('illumination-percent').textContent = `${illuminationPercent}%`;
             document.getElementById('illumination-fill').style.width = `${illuminationPercent}%`;
+
+            // Update next moon phases
+            document.getElementById('next-new-moon').textContent = formatDate(data.moon.next_new_moon);
+            document.getElementById('next-full-moon').textContent = formatDate(data.moon.next_full_moon);
 
             // Update moon phase visualization
             updateMoonPhaseVisual(data.moon.phase_day_0_29);
@@ -1243,6 +1585,17 @@
             return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         }
 
+        function formatDate(dateStr) {
+            if (!dateStr) {
+                return 'N/A';
+            }
+            const parsed = new Date(dateStr);
+            if (Number.isNaN(parsed.getTime())) {
+                return 'N/A';
+            }
+            return parsed.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
         function formatDayLength(seconds) {
             if (seconds === null || seconds === undefined) {
                 return 'N/A';
@@ -1278,6 +1631,67 @@
                 return 'Manual coordinates not set';
             }
             return `Manual coordinates (${formatCoordinate(latValue, 'lat')}, ${formatCoordinate(lonValue, 'lon')})`;
+        }
+
+        async function fetchWeatherData() {
+            const latValue = parseFloat(document.getElementById('latitude').value);
+            const lonValue = parseFloat(document.getElementById('longitude').value);
+
+            if (Number.isNaN(latValue) || Number.isNaN(lonValue)) {
+                console.warn('Invalid coordinates for weather fetch');
+                return;
+            }
+
+            try {
+                const params = new URLSearchParams({
+                    lat: latValue.toString(),
+                    lon: lonValue.toString(),
+                });
+
+                const response = await fetch(`/weather?${params.toString()}`);
+                if (!response.ok) {
+                    throw new Error(`Weather request failed with status ${response.status}`);
+                }
+
+                const data = await response.json();
+                updateWeatherDisplay(data);
+            } catch (error) {
+                console.error('Failed to fetch weather data', error);
+                // Show error in weather card but don't block the rest of the dashboard
+                document.getElementById('weather-condition').textContent = 'Unable to load weather';
+            }
+        }
+
+        function updateWeatherDisplay(data) {
+            // Use metric (Celsius) by default
+            const tempUnit = '°C';
+            const windUnit = ' km/h';
+
+            document.getElementById('temperature').textContent = `${Math.round(data.current.temp_c)}${tempUnit}`;
+            document.getElementById('feels-like').textContent = `${Math.round(data.current.feels_like_c)}${tempUnit}`;
+            document.getElementById('weather-condition').textContent = data.current.condition.text;
+
+            // Set weather icon (add https: prefix if missing)
+            const iconUrl = data.current.condition.icon.startsWith('//')
+                ? `https:${data.current.condition.icon}`
+                : data.current.condition.icon;
+            document.getElementById('weather-icon').src = iconUrl;
+
+            document.getElementById('humidity').textContent = `${data.current.humidity}%`;
+            document.getElementById('wind').textContent = `${Math.round(data.current.wind_kph)}${windUnit} ${data.current.wind_dir}`;
+            document.getElementById('pressure').textContent = `${Math.round(data.current.pressure_mb)} mb`;
+            document.getElementById('precipitation').textContent = `${data.current.precip_mm} mm`;
+            document.getElementById('uv-index').textContent = data.current.uv;
+        }
+
+        function startWeatherRefresh() {
+            if (weatherRefreshTimer) {
+                clearInterval(weatherRefreshTimer);
+            }
+            weatherRefreshTimer = setInterval(() => {
+                console.log('Auto-refreshing weather data');
+                fetchWeatherData();
+            }, WEATHER_REFRESH_MS);
         }
     </script>
 </body>

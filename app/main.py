@@ -9,10 +9,12 @@ from typing import Any, Callable, Optional
 
 import uvicorn
 import yaml
+import httpx
 from astral import Observer, moon
 from astral import sun as astral_sun
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from zoneinfo import ZoneInfo
 from timezonefinder import TimezoneFinder
@@ -27,6 +29,9 @@ try:
         LinksResponse,
         LinkItem,
         TimePeriod,
+        WeatherResponse,
+        WeatherCurrent,
+        WeatherCondition,
     )
     from app.settings import settings
 except ModuleNotFoundError:
@@ -43,6 +48,9 @@ except ModuleNotFoundError:
         LinksResponse,
         LinkItem,
         TimePeriod,
+        WeatherResponse,
+        WeatherCurrent,
+        WeatherCondition,
     )
     from app.settings import settings
 
@@ -58,6 +66,7 @@ logger = logging.getLogger("astro-api")
 app = FastAPI(title=settings.app_name)
 
 WEB_ROOT = Path(__file__).resolve().parent.parent / "web"
+FAVICONS_DIR = WEB_ROOT / "favicons"
 
 app.add_middleware(
     CORSMiddleware,
@@ -66,6 +75,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files for favicons
+app.mount("/favicons", StaticFiles(directory=FAVICONS_DIR), name="favicons")
 
 _tzf = TimezoneFinder(in_memory=True)
 SunDirection = getattr(astral_sun, "SunDirection")
@@ -118,12 +130,45 @@ def approx_illumination(phase_day_0_29: int) -> float:
     """
     Simple, smooth heuristic for fractional illumination from phase day.
     0..29 mapped onto 0..2π, illumination ≈ (1 - cos(θ)) / 2
-    This isn’t precise astronomy, but close enough for a dashboard.
+    This isn't precise astronomy, but close enough for a dashboard.
     """
     import math
 
     theta = (phase_day_0_29 % 30) * (2 * math.pi / 29.53)  # synodic month ~29.53 days
     return max(0.0, min(1.0, (1 - math.cos(theta)) / 2))
+
+
+def find_next_moon_phase(from_date: date, target_phase: int, max_days: int = 60) -> date:
+    """
+    Find the next occurrence of a specific moon phase.
+
+    Args:
+        from_date: Starting date to search from
+        target_phase: Target phase day (0=new moon, 7=first quarter, 14=full moon, 21=last quarter)
+        max_days: Maximum days to search ahead (default 60 = 2 lunar cycles)
+
+    Returns:
+        Date of the next occurrence of the target phase
+    """
+    current_date = from_date
+
+    for _ in range(max_days):
+        current_date = current_date + __import__('datetime').timedelta(days=1)
+        phase = int(round(moon.phase(current_date)))
+
+        # Check if we've hit the target phase
+        # Account for phase wrapping (29 -> 0)
+        if phase == target_phase:
+            return current_date
+
+    # Fallback: return approximate date based on lunar cycle
+    # Average lunar cycle is 29.53 days
+    from datetime import timedelta
+    current_phase = int(round(moon.phase(from_date)))
+    days_to_target = (target_phase - current_phase) % 30
+    if days_to_target == 0 and current_phase != target_phase:
+        days_to_target = 30
+    return from_date + timedelta(days=days_to_target)
 
 
 def _record_metric(
@@ -323,13 +368,20 @@ def compute_moon(
 ) -> MoonInfo:
     """
     Compute simple moon info via Astral: phase day number and a readable name.
-    Adds a smooth illumination heuristic.
+    Adds a smooth illumination heuristic and calculates next new/full moon dates.
     """
     overall_start = perf_counter()
     try:
         step = perf_counter()
         phase_day = int(round(moon.phase(on_date)))
         _record_metric(metrics, f"{prefix}.phase_ms", step)
+
+        # Calculate next new moon and full moon
+        step = perf_counter()
+        next_new = find_next_moon_phase(on_date, 0)  # 0 = new moon
+        next_full = find_next_moon_phase(on_date, 14)  # 14 = full moon
+        _record_metric(metrics, f"{prefix}.next_phases_ms", step)
+
         tzinfo = ZoneInfo(tz_name)
         observer = Observer(latitude=lat, longitude=lon, elevation=elevation_m)
         elevation_series = build_hourly_elevation_series(
@@ -345,6 +397,8 @@ def compute_moon(
             phase_name=moon_phase_name(phase_day),
             illumination_fraction_est=round(approx_illumination(phase_day), 4),
             elevation_series=elevation_series or None,
+            next_new_moon=next_new,
+            next_full_moon=next_full,
         )
     except Exception as e:
         logger.exception("Astral moon computation failed: %s", e)
@@ -506,6 +560,89 @@ def feeds_stub():
         "items": [],
         "note": "Plug your discovery pipeline here (DB or file).",
     }
+
+
+@app.get("/weather", response_model=WeatherResponse, tags=["weather"])
+async def get_weather(
+    lat: float = Query(..., ge=-90, le=90, description="Latitude in degrees."),
+    lon: float = Query(..., ge=-180, le=180, description="Longitude in degrees."),
+) -> WeatherResponse:
+    """
+    Weather proxy endpoint that normalizes data from weather providers.
+    Currently supports WeatherAPI.com but abstracted for easy provider switching.
+
+    Returns normalized weather data including:
+    - Current temperature (C and F)
+    - Feels like temperature
+    - Humidity, wind, pressure
+    - Precipitation
+    - Weather condition with icon
+    - UV index
+    """
+    if not settings.weatherapi_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Weather service not configured. Set WEATHERAPI_KEY in environment.",
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # WeatherAPI.com endpoint
+            url = f"{settings.weatherapi_url}current.json"
+            params = {
+                "key": settings.weatherapi_key,
+                "q": f"{lat},{lon}",
+                "aqi": "no",  # Air quality not needed for now
+            }
+
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            # Normalize response to our format
+            location_data = data.get("location", {})
+            current_data = data.get("current", {})
+            condition_data = current_data.get("condition", {})
+
+            return WeatherResponse(
+                location=location_data.get("name", "Unknown"),
+                region=location_data.get("region"),
+                country=location_data.get("country", "Unknown"),
+                localtime=location_data.get("localtime", ""),
+                current=WeatherCurrent(
+                    temp_c=current_data.get("temp_c", 0.0),
+                    temp_f=current_data.get("temp_f", 0.0),
+                    feels_like_c=current_data.get("feelslike_c", 0.0),
+                    feels_like_f=current_data.get("feelslike_f", 0.0),
+                    humidity=current_data.get("humidity", 0),
+                    wind_kph=current_data.get("wind_kph", 0.0),
+                    wind_mph=current_data.get("wind_mph", 0.0),
+                    wind_dir=current_data.get("wind_dir", ""),
+                    pressure_mb=current_data.get("pressure_mb", 0.0),
+                    precip_mm=current_data.get("precip_mm", 0.0),
+                    condition=WeatherCondition(
+                        text=condition_data.get("text", "Unknown"),
+                        icon=condition_data.get("icon", ""),
+                        code=condition_data.get("code", 0),
+                    ),
+                    uv=current_data.get("uv", 0.0),
+                ),
+            )
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Weather API HTTP error: {e.response.status_code}")
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"Weather API error: {e.response.text}",
+        )
+    except httpx.RequestError as e:
+        logger.error(f"Weather API request error: {e}")
+        raise HTTPException(
+            status_code=503, detail="Unable to reach weather service"
+        )
+    except Exception as e:
+        logger.exception(f"Unexpected weather API error: {e}")
+        raise HTTPException(status_code=500, detail="Internal weather service error")
 
 
 def create_app() -> FastAPI:
