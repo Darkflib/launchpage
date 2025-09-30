@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date as Date, datetime
-from typing import List, Optional, Literal
+from typing import Dict, List, Optional, Literal
 from pydantic import BaseModel, Field
 
 
@@ -16,6 +16,13 @@ class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
     app: str
     time_utc: datetime
+
+
+class TimePeriod(BaseModel):
+    """Simple start/end pair for twilight windows."""
+
+    start: Optional[datetime] = None
+    end: Optional[datetime] = None
 
 
 class AstroQuery(BaseModel):
@@ -46,12 +53,18 @@ class SunTimes(BaseModel):
     nautical_dusk: Optional[datetime] = None
     astronomical_dawn: Optional[datetime] = None
     astronomical_dusk: Optional[datetime] = None
+    blue_hour_morning: Optional[TimePeriod] = None
+    blue_hour_evening: Optional[TimePeriod] = None
+    golden_hour_morning: Optional[TimePeriod] = None
+    golden_hour_evening: Optional[TimePeriod] = None
+    solar_elevation_series: Optional[Dict[str, float]] = None
 
 
 class MoonInfo(BaseModel):
     phase_day_0_29: int
     phase_name: str
     illumination_fraction_est: float = Field(..., ge=0.0, le=1.0)  # heuristic
+    elevation_series: Optional[Dict[str, float]] = None
 
 
 class AstroResponse(BaseModel):
@@ -60,6 +73,7 @@ class AstroResponse(BaseModel):
     now_local: datetime
     sun: SunTimes
     moon: MoonInfo
+    profiling_ms: Optional[Dict[str, float]] = None
 
 
 class LinksResponse(BaseModel):

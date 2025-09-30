@@ -1,0 +1,12 @@
+- name: Home Assistant
+  url: "https://ha.internal.example"
+  group: home
+  icon: "home"
+- name: Jellyfin
+  url: "https://media.internal.example"
+  group: media
+  icon: "tv"
+- name: Grafana
+  url: "https://grafana.internal.example"
+  group: observability
+  icon: "activity"
