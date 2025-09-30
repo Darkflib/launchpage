@@ -25,6 +25,10 @@ A FastAPI application with an interactive dashboard that provides astronomical a
 - **Service links**: Customizable quick links from YAML configuration
 - **Interactive controls**: Collapsible location picker, manual coordinate entry, date selection
 
+## Screenshot
+
+![Dashboard Screenshot](https://raw.githubusercontent.com/darkflib/launchpage/main/screenshot.png)
+
 ## API Endpoints
 
 - `GET /` — Interactive dashboard (HTML)
