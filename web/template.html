@@ -721,6 +721,109 @@
             font-weight: 600;
             color: var(--dark);
         }
+
+        .weather-forecast {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .forecast-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 15px;
+        }
+
+        .forecast-days {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        @media (max-width: 600px) {
+            .forecast-days {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .forecast-day {
+            background: rgba(74, 111, 165, 0.05);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            transition: var(--transition);
+        }
+
+        .forecast-day:hover {
+            background: rgba(74, 111, 165, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .forecast-date {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        .forecast-icon img {
+            width: 48px;
+            height: 48px;
+        }
+
+        .forecast-temp {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--dark);
+            margin: 8px 0;
+        }
+
+        .forecast-temp-range {
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin-bottom: 6px;
+        }
+
+        .forecast-condition {
+            font-size: 0.75rem;
+            color: #6c757d;
+            margin-bottom: 6px;
+        }
+
+        .forecast-detail {
+            display: flex;
+            justify-content: space-around;
+            font-size: 0.7rem;
+            color: #6c757d;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        .forecast-detail-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .forecast-detail-item i {
+            color: var(--primary);
+            font-size: 0.85rem;
+        }
+
+        .last-updated {
+            font-size: 0.75rem;
+            color: #6c757d;
+            margin-top: 15px;
+            text-align: right;
+            font-style: italic;
+        }
+
+        .last-updated i {
+            margin-right: 4px;
+        }
     </style>
 </head>
 <body>
@@ -862,6 +965,16 @@
                         <span class="weather-detail-value" id="uv-index">--</span>
                     </div>
                 </div>
+                <div class="weather-forecast" id="weather-forecast" style="display: none;">
+                    <div class="forecast-title">3-Day Forecast</div>
+                    <div class="forecast-days" id="forecast-days">
+                        <!-- Forecast days will be populated here -->
+                    </div>
+                </div>
+                <div class="last-updated">
+                    <i class="fas fa-clock"></i>
+                    <span id="weather-last-updated">--</span>
+                </div>
             </div>
 
             <div class="card sun-card">
@@ -1000,6 +1113,10 @@
                         </div>
                     </div>
                 </div>
+                <div class="last-updated">
+                    <i class="fas fa-clock"></i>
+                    <span id="sun-last-updated">--</span>
+                </div>
             </div>
 
             <div class="card moon-card">
@@ -1041,6 +1158,10 @@
                         <div class="info-value" id="next-full-moon">2024-10-30</div>
                     </div>
                 </div>
+                <div class="last-updated">
+                    <i class="fas fa-clock"></i>
+                    <span id="moon-last-updated">--</span>
+                </div>
             </div>
         </div>
 
@@ -1075,6 +1196,9 @@
         let currentTimezone = null;
         let clockInterval = null;
         let weatherRefreshTimer = null;
+        let lastWeatherUpdate = null;
+        let lastAstroUpdate = null;
+        let currentSunData = null; // Store sun data for real-time position updates
         const CACHE_KEY = 'astro_dashboard_cache';
         const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours for sun/moon data
         const WEATHER_REFRESH_MS = 15 * 60 * 1000; // 15 minutes for weather data
@@ -1177,6 +1301,15 @@
             if (cached) {
                 console.log('Loading from cache', cached.fresh ? '(fresh)' : '(stale)');
                 updateDashboard(cached.data);
+                // Set lastAstroUpdate to cache timestamp for accurate "last updated" display
+                try {
+                    const cacheEntry = JSON.parse(localStorage.getItem(CACHE_KEY));
+                    if (cacheEntry && cacheEntry.timestamp) {
+                        lastAstroUpdate = cacheEntry.timestamp;
+                    }
+                } catch (e) {
+                    // Ignore errors
+                }
                 // Update location inputs from cached data
                 if (cached.data.query) {
                     updateLocationInputs(cached.data.query.lat, cached.data.query.lon);
@@ -1306,6 +1439,7 @@
                 const data = await response.json();
                 updateDashboard(data);
                 saveToCache(data); // Save to cache for next load
+                lastAstroUpdate = Date.now(); // Track when astro data was updated
                 errorContainer.innerHTML = '';
             } catch (error) {
                 console.error('Failed to fetch astro data', error);
@@ -1372,6 +1506,45 @@
                     minute: '2-digit',
                     second: '2-digit'
                 });
+            }
+
+            // Update "last updated" timestamps
+            updateLastUpdatedDisplays();
+
+            // Update sun position in real-time
+            if (currentSunData) {
+                updateSunArc(currentSunData);
+            }
+        }
+
+        function updateLastUpdatedDisplays() {
+            const now = Date.now();
+
+            if (lastWeatherUpdate) {
+                document.getElementById('weather-last-updated').textContent = formatTimeAgo(now - lastWeatherUpdate);
+            }
+
+            if (lastAstroUpdate) {
+                const astroText = formatTimeAgo(now - lastAstroUpdate);
+                document.getElementById('sun-last-updated').textContent = astroText;
+                document.getElementById('moon-last-updated').textContent = astroText;
+            }
+        }
+
+        function formatTimeAgo(milliseconds) {
+            const seconds = Math.floor(milliseconds / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+
+            if (seconds < 60) {
+                return 'Updated just now';
+            } else if (minutes < 60) {
+                return `Updated ${minutes} min${minutes !== 1 ? 's' : ''} ago`;
+            } else if (hours < 24) {
+                return `Updated ${hours} hour${hours !== 1 ? 's' : ''} ago`;
+            } else {
+                return `Updated ${days} day${days !== 1 ? 's' : ''} ago`;
             }
         }
 
@@ -1444,8 +1617,11 @@
 
             currentLocationLabel.textContent = `${formatCoordinate(data.query.lat, 'lat')}, ${formatCoordinate(data.query.lon, 'lon')} • ${data.timezone}`;
 
-            // Update sun arc visualization
-            updateSunArc(data.sun, data.now_local);
+            // Store sun data for real-time updates
+            currentSunData = data.sun;
+
+            // Update sun arc visualization with current time
+            updateSunArc(data.sun);
         }
 
         function updateMoonPhaseVisual(phaseDay) {
@@ -1486,11 +1662,15 @@
             }
         }
 
-        function updateSunArc(sunData, nowLocalStr) {
+        function updateSunArc(sunData) {
             const sunrise = sunData.sunrise ? new Date(sunData.sunrise) : null;
             const solarNoon = sunData.solar_noon ? new Date(sunData.solar_noon) : null;
             const sunset = sunData.sunset ? new Date(sunData.sunset) : null;
-            const now = new Date(nowLocalStr);
+
+            // Always use current time in the correct timezone for real-time updates
+            const now = currentTimezone ?
+                new Date(new Date().toLocaleString('en-US', { timeZone: currentTimezone })) :
+                new Date();
 
             // Update legend times
             document.getElementById('arc-sunrise-time').textContent = formatTime(sunData.sunrise);
@@ -1646,6 +1826,7 @@
                 const params = new URLSearchParams({
                     lat: latValue.toString(),
                     lon: lonValue.toString(),
+                    days: '3', // Request 3-day forecast
                 });
 
                 const response = await fetch(`/weather?${params.toString()}`);
@@ -1655,6 +1836,7 @@
 
                 const data = await response.json();
                 updateWeatherDisplay(data);
+                lastWeatherUpdate = Date.now(); // Track when weather data was updated
             } catch (error) {
                 console.error('Failed to fetch weather data', error);
                 // Show error in weather card but don't block the rest of the dashboard
@@ -1682,6 +1864,59 @@
             document.getElementById('pressure').textContent = `${Math.round(data.current.pressure_mb)} mb`;
             document.getElementById('precipitation').textContent = `${data.current.precip_mm} mm`;
             document.getElementById('uv-index').textContent = data.current.uv;
+
+            // Update forecast if available
+            if (data.forecast && data.forecast.days && data.forecast.days.length > 0) {
+                updateForecastDisplay(data.forecast.days, tempUnit);
+                document.getElementById('weather-forecast').style.display = 'block';
+            } else {
+                document.getElementById('weather-forecast').style.display = 'none';
+            }
+        }
+
+        function updateForecastDisplay(forecastDays, tempUnit) {
+            const forecastContainer = document.getElementById('forecast-days');
+            forecastContainer.innerHTML = '';
+
+            forecastDays.forEach((day, index) => {
+                const date = new Date(day.date);
+                const dayName = index === 0 ? 'Today' : date.toLocaleDateString('en-US', { weekday: 'short' });
+                const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                const iconUrl = day.condition.icon.startsWith('//')
+                    ? `https:${day.condition.icon}`
+                    : day.condition.icon;
+
+                const forecastCard = document.createElement('div');
+                forecastCard.className = 'forecast-day';
+                forecastCard.innerHTML = `
+                    <div class="forecast-date">${dayName}<br>${dateStr}</div>
+                    <div class="forecast-icon">
+                        <img src="${iconUrl}" alt="${day.condition.text}">
+                    </div>
+                    <div class="forecast-temp">${Math.round(day.avg_temp_c)}${tempUnit}</div>
+                    <div class="forecast-temp-range">
+                        <i class="fas fa-arrow-up" style="color: #dc3545;"></i> ${Math.round(day.max_temp_c)}${tempUnit}
+                        <i class="fas fa-arrow-down" style="color: #4a6fa5;"></i> ${Math.round(day.min_temp_c)}${tempUnit}
+                    </div>
+                    <div class="forecast-condition">${day.condition.text}</div>
+                    <div class="forecast-detail">
+                        <div class="forecast-detail-item">
+                            <i class="fas fa-tint"></i>
+                            <span>${day.avg_humidity}%</span>
+                        </div>
+                        <div class="forecast-detail-item">
+                            <i class="fas fa-cloud-rain"></i>
+                            <span>${day.daily_chance_of_rain}%</span>
+                        </div>
+                        <div class="forecast-detail-item">
+                            <i class="fas fa-wind"></i>
+                            <span>${Math.round(day.max_wind_kph)}</span>
+                        </div>
+                    </div>
+                `;
+                forecastContainer.appendChild(forecastCard);
+            });
         }
 
         function startWeatherRefresh() {

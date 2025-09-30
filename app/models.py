@@ -103,9 +103,33 @@ class WeatherCurrent(BaseModel):
     uv: float
 
 
+class ForecastDay(BaseModel):
+    date: str  # YYYY-MM-DD
+    date_epoch: int
+    max_temp_c: float
+    max_temp_f: float
+    min_temp_c: float
+    min_temp_f: float
+    avg_temp_c: float
+    avg_temp_f: float
+    max_wind_kph: float
+    max_wind_mph: float
+    total_precip_mm: float
+    avg_humidity: int
+    condition: WeatherCondition
+    uv: float
+    daily_chance_of_rain: int
+    daily_chance_of_snow: int
+
+
+class WeatherForecast(BaseModel):
+    days: List[ForecastDay]
+
+
 class WeatherResponse(BaseModel):
     location: str
     region: Optional[str] = None
     country: str
     localtime: str
     current: WeatherCurrent
+    forecast: Optional[WeatherForecast] = None

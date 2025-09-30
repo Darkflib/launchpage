@@ -32,6 +32,8 @@ try:
         WeatherResponse,
         WeatherCurrent,
         WeatherCondition,
+        WeatherForecast,
+        ForecastDay,
     )
     from app.settings import settings
 except ModuleNotFoundError:
@@ -51,6 +53,8 @@ except ModuleNotFoundError:
         WeatherResponse,
         WeatherCurrent,
         WeatherCondition,
+        WeatherForecast,
+        ForecastDay,
     )
     from app.settings import settings
 
@@ -566,6 +570,7 @@ def feeds_stub():
 async def get_weather(
     lat: float = Query(..., ge=-90, le=90, description="Latitude in degrees."),
     lon: float = Query(..., ge=-180, le=180, description="Longitude in degrees."),
+    days: int = Query(default=0, ge=0, le=10, description="Number of forecast days (0-10). 0 = current only."),
 ) -> WeatherResponse:
     """
     Weather proxy endpoint that normalizes data from weather providers.
@@ -578,6 +583,7 @@ async def get_weather(
     - Precipitation
     - Weather condition with icon
     - UV index
+    - Optional multi-day forecast (up to 10 days)
     """
     if not settings.weatherapi_key:
         raise HTTPException(
@@ -587,13 +593,22 @@ async def get_weather(
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            # WeatherAPI.com endpoint
-            url = f"{settings.weatherapi_url}current.json"
-            params = {
-                "key": settings.weatherapi_key,
-                "q": f"{lat},{lon}",
-                "aqi": "no",  # Air quality not needed for now
-            }
+            # WeatherAPI.com endpoint - use forecast.json if days > 0, otherwise current.json
+            if days > 0:
+                url = f"{settings.weatherapi_url}forecast.json"
+                params = {
+                    "key": settings.weatherapi_key,
+                    "q": f"{lat},{lon}",
+                    "days": days,
+                    "aqi": "no",
+                }
+            else:
+                url = f"{settings.weatherapi_url}current.json"
+                params = {
+                    "key": settings.weatherapi_key,
+                    "q": f"{lat},{lon}",
+                    "aqi": "no",
+                }
 
             response = await client.get(url, params=params)
             response.raise_for_status()
@@ -603,6 +618,38 @@ async def get_weather(
             location_data = data.get("location", {})
             current_data = data.get("current", {})
             condition_data = current_data.get("condition", {})
+
+            # Parse forecast data if available
+            forecast = None
+            if days > 0 and "forecast" in data:
+                forecast_data = data["forecast"].get("forecastday", [])
+                forecast_days = []
+                for day_data in forecast_data:
+                    day = day_data.get("day", {})
+                    day_condition = day.get("condition", {})
+                    forecast_days.append(ForecastDay(
+                        date=day_data.get("date", ""),
+                        date_epoch=day_data.get("date_epoch", 0),
+                        max_temp_c=day.get("maxtemp_c", 0.0),
+                        max_temp_f=day.get("maxtemp_f", 0.0),
+                        min_temp_c=day.get("mintemp_c", 0.0),
+                        min_temp_f=day.get("mintemp_f", 0.0),
+                        avg_temp_c=day.get("avgtemp_c", 0.0),
+                        avg_temp_f=day.get("avgtemp_f", 0.0),
+                        max_wind_kph=day.get("maxwind_kph", 0.0),
+                        max_wind_mph=day.get("maxwind_mph", 0.0),
+                        total_precip_mm=day.get("totalprecip_mm", 0.0),
+                        avg_humidity=day.get("avghumidity", 0),
+                        condition=WeatherCondition(
+                            text=day_condition.get("text", "Unknown"),
+                            icon=day_condition.get("icon", ""),
+                            code=day_condition.get("code", 0),
+                        ),
+                        uv=day.get("uv", 0.0),
+                        daily_chance_of_rain=day.get("daily_chance_of_rain", 0),
+                        daily_chance_of_snow=day.get("daily_chance_of_snow", 0),
+                    ))
+                forecast = WeatherForecast(days=forecast_days)
 
             return WeatherResponse(
                 location=location_data.get("name", "Unknown"),
@@ -627,6 +674,7 @@ async def get_weather(
                     ),
                     uv=current_data.get("uv", 0.0),
                 ),
+                forecast=forecast,
             )
 
     except httpx.HTTPStatusError as e:
