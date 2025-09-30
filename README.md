@@ -1,35 +1,97 @@
-# Astro API
+# Astro API Dashboard
 
-A small FastAPI app that, given latitude/longitude, returns:
-- Timezone (IANA) at that location,
-- “Now” in that timezone,
-- Sun events (dawn, sunrise, solar noon, sunset, dusk), day length, and whether it’s daylight right now,
-- Moon phase (0–29), a phase name, and a heuristic illumination fraction.
+A FastAPI application with an interactive dashboard that provides astronomical and weather data for any location on Earth.
 
-## Endpoints
+## Features
 
-- `GET /health`
-- `GET /links` — returns YAML-defined personal service links
-- `GET /astro?lat=51.5&lon=-0.13` — optional `date_str=YYYY-MM-DD`, `tz_override=Europe/London`, `elevation_m=0`
-- `GET /feeds` — stub for your discovery pipeline
+### Astronomical Data
+- **Sun times**: Dawn, sunrise, solar noon, sunset, dusk with civil/nautical/astronomical twilight
+- **Golden & blue hours**: Photography-optimized time windows
+- **Moon phases**: Current phase, illumination fraction, next new/full moon dates
+- **Solar elevation**: Hourly elevation series for the entire day
+- **Real-time sun position**: Interactive arc visualization showing current sun position
+- **Timezone resolution**: Offline IANA timezone lookup (privacy-friendly, no external calls)
 
-## Run locally
+### Weather Data
+- **Current conditions**: Temperature, feels-like, humidity, wind, pressure, precipitation, UV index
+- **3-day forecast**: Daily high/low temps, conditions, rain/snow chance, wind speeds
+- **Auto-refresh**: Weather updates every 15 minutes
+- **Location-aware**: Automatically detects browser location or accepts manual coordinates
+
+### Dashboard Features
+- **Responsive design**: Works on desktop, tablet, and mobile
+- **Real-time updates**: Clock, sun position, and "last updated" timestamps refresh every second
+- **24-hour caching**: Smart caching for astronomical data with background refresh
+- **Service links**: Customizable quick links from YAML configuration
+- **Interactive controls**: Collapsible location picker, manual coordinate entry, date selection
+
+## API Endpoints
+
+- `GET /` — Interactive dashboard (HTML)
+- `GET /health` — Health check with timestamp
+- `GET /astro?lat={lat}&lon={lon}` — Astronomical data
+  - Optional: `date_str=YYYY-MM-DD`, `tz_override=Europe/London`, `elevation_m=0`
+- `GET /weather?lat={lat}&lon={lon}&days={0-10}` — Weather data with optional forecast
+- `GET /links` — Personal service links from YAML
+- `GET /feeds` — Stub for discovery pipeline integration
+
+## Quick Start
+
+### Prerequisites
+- Python 3.11+
+- [uv](https://github.com/astral-sh/uv) package manager
+- WeatherAPI.com API key (free tier available at https://www.weatherapi.com/)
+
+### Installation
 
 ```bash
+# Install dependencies
 uv pip install -e .
+
+# Create .env file with your API key
+echo "WEATHERAPI_KEY=your_key_here" > .env
+
+# Run development server
 uvicorn app.main:app --reload
 ```
 
-Open http://127.0.0.1:8000/docs
- for Swagger UI.
+Open http://127.0.0.1:8000 for the dashboard or http://127.0.0.1:8000/docs for API documentation.
 
-## Notes
+## Configuration
 
-Astral’s default dawn/dusk are civil twilight (~ -6°). For nautical/astronomical variants, we can add parameters later.
+Create a `.env` file in the project root:
 
-Polar day/night: certain events may be null.
+```env
+# Required for weather functionality
+WEATHERAPI_KEY=your_api_key_here
 
-TZ resolution uses timezonefinder offline; no external calls, and privacy-friendly.
+# Optional settings
+APP_NAME=Astro API
+DEBUG=false
+ALLOWED_ORIGINS=["http://localhost:5173", "http://localhost:3000", "*"]
+LINKS_FILE=app/sample_links.yaml
+```
+
+## Architecture
+
+### Backend (FastAPI)
+- **`app/main.py`**: Core application with all route handlers and astronomical computations
+- **`app/models.py`**: Pydantic models for request/response validation
+- **`app/settings.py`**: Configuration via environment variables
+- **`app/sample_links.yaml`**: Personal service links configuration
+
+### Frontend (Single Page)
+- **`web/template.html`**: Complete dashboard with vanilla JavaScript
+- **Real-time updates**: Sun position calculated every second using cached sunrise/sunset times
+- **Smart caching**: 24-hour cache for astronomical data, 15-minute refresh for weather
+- **Local storage**: Persistent cache survives page reloads
+
+### Key Libraries
+- **FastAPI**: Web framework
+- **Astral**: Sun/moon calculations
+- **timezonefinder**: Offline timezone resolution
+- **httpx**: Async HTTP client for weather API
+- **Pydantic**: Data validation and settings
 
 ---
 
@@ -42,10 +104,29 @@ TZ resolution uses timezonefinder offline; no external calls, and privacy-friend
 - **Non-root container**, minimal base, `tzdata` installed for correct conversions.
 - **Observability**: add structured logging (JSON) if you’re pumping into Loki/ELK; attach Prometheus via `prometheus-fastapi-instrumentator` if desired.
 
-## Extending for your feeds and links
+## Customization
 
-- Replace `/feeds` with a reader over your discovery pipeline’s SQLite/Redis export, or a JSONL tailer.
-- Swap `app/sample_links.yaml` for a config managed in Git (GitOps), or load from S3/GCS with short TTL caching.
+### Service Links
+Edit `app/sample_links.yaml` to add your personal links:
+
+```yaml
+- name: GitHub
+  url: https://github.com
+  icon: fab fa-github
+  group: dev
+
+- name: Gmail
+  url: https://gmail.com
+  icon: fas fa-envelope
+  group: personal
+```
+
+### Discovery Feed
+The `/feeds` endpoint is a stub for integration with content discovery pipelines:
+- SQLite/Redis export reader
+- JSONL log tailer
+- RSS aggregator
+- Custom content sources
 
 ## Alternatives / improvements
 
@@ -55,17 +136,61 @@ TZ resolution uses timezonefinder offline; no external calls, and privacy-friend
 - **Rate limiting:** `slowapi` or a reverse proxy (Traefik/Nginx) with IP limiting for public exposure.
 - **Schema-first:** publish an OpenAPI client; you can even host a typed SDK for your apps.
 
-## Example calls
+## Example API Calls
 
-- `GET /astro?lat=52.831&lon=-1.285` (Kegworth-ish)
-- `GET /astro?lat=69.6492&lon=18.9553&date_str=2025-06-21` (Tromsø solstice; expect 24h daylight and some nulls)
+### Astronomical Data
+```bash
+# Current location
+curl "http://localhost:8000/astro?lat=52.831&lon=-1.285"
 
----
+# Specific date (Tromsø summer solstice - midnight sun)
+curl "http://localhost:8000/astro?lat=69.6492&lon=18.9553&date_str=2025-06-21"
 
-## Confidence
+# With timezone override
+curl "http://localhost:8000/astro?lat=40.7128&lon=-74.0060&tz_override=America/New_York"
+```
 
-- Correctness of plumbing and API structure: **0.94**
-- Astral phase naming and illumination heuristic (vs precise photometry): **0.85**
-- TZ resolution accuracy (IANA ID coverage): **0.92**
+### Weather Data
+```bash
+# Current weather only
+curl "http://localhost:8000/weather?lat=40.7128&lon=-74.0060"
 
-If you want, I can add: `depression` parameter for twilight flavours, `/astro/batch`, a tiny in-memory cache, and a Prometheus `/metrics` endpoint.
+# With 3-day forecast
+curl "http://localhost:8000/weather?lat=40.7128&lon=-74.0060&days=3"
+```
+
+## Deployment
+
+### Docker
+```bash
+# Build
+docker build -t astro-api .
+
+# Run
+docker run -p 8000:8000 -e WEATHERAPI_KEY=your_key astro-api
+```
+
+### Production Considerations
+- Use a reverse proxy (Nginx/Traefik) for SSL termination
+- Set `ALLOWED_ORIGINS` to your production domains
+- Consider rate limiting with `slowapi` or at the proxy level
+- Add monitoring with Prometheus/Grafana
+- Enable structured logging for centralized log aggregation
+
+## Edge Cases & Notes
+
+- **Polar regions**: Sun events may be `null` during polar day/night
+- **Twilight**: Returns civil (-6°), nautical (-12°), and astronomical (-18°) twilight times
+- **Moon illumination**: Heuristic calculation, not precise photometry
+- **Privacy**: Timezone resolution is 100% offline - coordinates never leave your server
+- **Caching**: Astronomical data cached for 24h, weather for 15min
+
+## Future Enhancements
+
+- [ ] Hourly weather forecast (currently daily only)
+- [ ] Air quality index integration
+- [ ] Moon rise/set times
+- [ ] Batch endpoint for multiple locations (`POST /astro/batch`)
+- [ ] Customizable twilight depression angles
+- [ ] Astronomy image of the day widget
+- [ ] Dark mode toggle
