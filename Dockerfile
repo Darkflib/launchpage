@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY app ./app
+COPY web ./web
 
 # Use uv if you prefer; pip here for portability
 RUN pip install --no-cache-dir uv && uv pip install --system -r <(uv pip compile --quiet pyproject.toml)
