@@ -15,8 +15,9 @@ COPY pyproject.toml README.md ./
 COPY app ./app
 COPY web ./web
 
-# Use uv if you prefer; pip here for portability
-RUN pip install --no-cache-dir uv && uv pip install --system -r <(uv pip compile --quiet pyproject.toml)
+RUN pip install --no-cache-dir uv && \
+    uv pip compile pyproject.toml > requirements.txt && \
+    uv pip install --system -r requirements.txt
 
 EXPOSE 8000
 USER 65532:65532
