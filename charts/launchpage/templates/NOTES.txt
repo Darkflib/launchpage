@@ -1,0 +1,14 @@
+1. Get the application URL by running these commands:
+{{- if .Values.ingress.enabled }}
+  http{{ if (index .Values.ingress.tls 0) }}s{{ end }}://{{ (index .Values.ingress.hosts 0).host }}
+{{- else if eq .Values.service.type "LoadBalancer" }}
+  NOTE: It may take a few minutes for the external IP to be assigned.
+  Watch the status: kubectl get svc -w {{ include "launchpage.fullname" . }}
+{{- else if eq .Values.service.type "NodePort" }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "launchpage.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo "Visit http://$NODE_IP:$NODE_PORT"
+{{- else }}
+  kubectl port-forward svc/{{ include "launchpage.fullname" . }} 8080:{{ .Values.service.port }}
+  Visit http://127.0.0.1:8080
+{{- end }}

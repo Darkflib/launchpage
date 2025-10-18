@@ -1,0 +1,52 @@
+replicaCount: 1
+
+image:
+  repository: launchpage
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 8000
+  loadBalancerIP: ""
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: launchpage.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+env:
+  APP_NAME: "Astro API"
+  DEBUG: "false"
+  ALLOWED_ORIGINS: "[\"http://localhost:5173\",\"http://localhost:3000\",\"*\"]"
+  LINKS_FILE: "app/sample_links.yaml"
+  WEATHERAPI_KEY: ""
+  WEATHERAPI_URL: "http://api.weatherapi.com/v1/"
+  CACHE_TTL_SECONDS: "3600"
+
+extraEnv: []
+
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+podAnnotations: {}
+
+serviceAccount:
+  create: false
+  name: ""
+
+podSecurityContext: {}
+
+securityContext: {}
