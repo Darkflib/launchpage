@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import sys
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
+from math import cos, degrees, radians, sin
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Callable, Optional
@@ -11,6 +12,7 @@ import uvicorn
 import yaml
 import httpx
 from astral import Observer, moon
+from astral.julian import julianday
 from astral import sun as astral_sun
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -130,49 +132,106 @@ def moon_phase_name(phase_day_0_29: int) -> str:
     return "Waning Crescent"  # 22-29
 
 
-def approx_illumination(phase_day_0_29: int) -> float:
+def approx_illumination(now: datetime) -> float:
     """
-    Simple, smooth heuristic for fractional illumination from phase day.
-    0..29 mapped onto 0..2π, illumination ≈ (1 - cos(θ)) / 2
-    This isn't precise astronomy, but close enough for a dashboard.
-    """
-    import math
+    Calculate moon illumination fraction for the supplied datetime.
 
-    theta = (phase_day_0_29 % 30) * (2 * math.pi / 29.53)  # synodic month ~29.53 days
-    return max(0.0, min(1.0, (1 - math.cos(theta)) / 2))
-
-
-def find_next_moon_phase(from_date: date, target_phase: int, max_days: int = 60) -> date:
-    """
-    Find the next occurrence of a specific moon phase.
+    Uses the low-precision elongation model described in Astronomical Algorithms
+    (Meeus) - the same basis Astral uses for phase computation - to derive the
+    angular separation between the sun and the moon, then converts that angle to
+    an illumination fraction.
 
     Args:
-        from_date: Starting date to search from
-        target_phase: Target phase day (0=new moon, 7=first quarter, 14=full moon, 21=last quarter)
-        max_days: Maximum days to search ahead (default 60 = 2 lunar cycles)
+        now: Current timezone-aware datetime
 
     Returns:
-        Date of the next occurrence of the target phase
+        Illumination fraction (0.0 to 1.0)
     """
-    current_date = from_date
+    now_utc = now.astimezone(timezone.utc)
+    jd = julianday(now_utc)
 
-    for _ in range(max_days):
-        current_date = current_date + __import__('datetime').timedelta(days=1)
-        phase = int(round(moon.phase(current_date)))
+    dt = ((jd - 2382148) ** 2) / (41048480 * 86400)
+    t = (jd + dt - 2451545.0) / 36525
+    t2 = t * t
+    t3 = t2 * t
 
-        # Check if we've hit the target phase
-        # Account for phase wrapping (29 -> 0)
-        if phase == target_phase:
-            return current_date
+    d = radians(297.85 + (445267.1115 * t) - (0.0016300 * t2) + (t3 / 545868))
+    m = radians(357.53 + (35999.0503 * t))
+    m1 = radians(134.96 + (477198.8676 * t) + (0.0089970 * t2) + (t3 / 69699))
 
-    # Fallback: return approximate date based on lunar cycle
-    # Average lunar cycle is 29.53 days
-    from datetime import timedelta
-    current_phase = int(round(moon.phase(from_date)))
-    days_to_target = (target_phase - current_phase) % 30
-    if days_to_target == 0 and current_phase != target_phase:
-        days_to_target = 30
-    return from_date + timedelta(days=days_to_target)
+    elong = (
+        degrees(d)
+        + 6.29 * sin(m1)
+        - 2.10 * sin(m)
+        + 1.27 * sin(2 * d - m1)
+        + 0.66 * sin(2 * d)
+    ) % 360.0
+
+    illumination = (1.0 - cos(radians(elong))) / 2.0
+    return max(0.0, min(1.0, illumination))
+
+
+def _phase_diff(value: float, target: float) -> float:
+    """Return the smallest difference between two lunar phase indices."""
+    raw = abs(value - target)
+    return min(raw, 30.0 - raw)
+
+
+def find_next_moon_phase(
+    start: datetime, target_phase: int, tzinfo: ZoneInfo, max_days: int = 60
+) -> datetime:
+    """
+    Find the next occurrence of a specific moon phase as a timezone-aware datetime.
+
+    Args:
+        start: Datetime to begin the search from (timezone-aware)
+        target_phase: Target phase day (0=new moon, 14=full moon, etc.)
+        tzinfo: Timezone for the returned datetime
+        max_days: Maximum days to search ahead (default 60)
+
+    Returns:
+        Datetime of the next occurrence of the target phase.
+    """
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=tzinfo)
+    else:
+        start = start.astimezone(tzinfo)
+
+    EPSILON = 1e-6
+    search_end = start + timedelta(days=max_days)
+    best_time = start
+    best_diff = _phase_diff(moon.phase(start), target_phase)
+
+    probe = start
+    coarse_step = timedelta(hours=6)
+    while probe <= search_end:
+        diff = _phase_diff(moon.phase(probe), target_phase)
+        if diff < best_diff:
+            best_diff = diff
+            best_time = probe
+            if diff < 0.05:
+                break
+        probe += coarse_step
+
+    # Refinement with progressively smaller steps (1h, 15m, 1m)
+    for step_hours in (1.0, 0.25, 1.0 / 60.0, 1.0 / 3600.0):
+        step = timedelta(hours=step_hours)
+        improved = True
+        while improved:
+            improved = False
+            for direction in (-1, 1):
+                candidate = best_time + (step * direction)
+                if candidate < start or candidate > search_end:
+                    continue
+                diff = _phase_diff(moon.phase(candidate), target_phase)
+                if diff + EPSILON < best_diff or (
+                    abs(diff - best_diff) <= EPSILON and candidate < best_time
+                ):
+                    best_diff = diff
+                    best_time = candidate
+                    improved = True
+
+    return best_time.astimezone(tzinfo)
 
 
 def _record_metric(
@@ -380,13 +439,15 @@ def compute_moon(
         phase_day = int(round(moon.phase(on_date)))
         _record_metric(metrics, f"{prefix}.phase_ms", step)
 
+        tzinfo = ZoneInfo(tz_name)
+
         # Calculate next new moon and full moon
         step = perf_counter()
-        next_new = find_next_moon_phase(on_date, 0)  # 0 = new moon
-        next_full = find_next_moon_phase(on_date, 14)  # 14 = full moon
+        now = datetime.now(tz=tzinfo)
+        next_new = find_next_moon_phase(now, 0, tzinfo)  # 0 = new moon
+        next_full = find_next_moon_phase(now, 14, tzinfo)  # 14 = full moon
         _record_metric(metrics, f"{prefix}.next_phases_ms", step)
 
-        tzinfo = ZoneInfo(tz_name)
         observer = Observer(latitude=lat, longitude=lon, elevation=elevation_m)
         elevation_series = build_hourly_elevation_series(
             observer=observer,
@@ -417,7 +478,7 @@ def compute_moon(
         return MoonInfo(
             phase_day_0_29=phase_day,
             phase_name=moon_phase_name(phase_day),
-            illumination_fraction_est=round(approx_illumination(phase_day), 4),
+            illumination_fraction_est=round(approx_illumination(now), 4),
             elevation_series=elevation_series or None,
             next_new_moon=next_new,
             next_full_moon=next_full,

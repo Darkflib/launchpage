@@ -459,27 +459,17 @@
             width: 120px;
             height: 120px;
             border-radius: 50%;
-            background: linear-gradient(90deg, #2c3e50 50%, #f8f9fa 50%);
             position: relative;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
             overflow: hidden;
+            background: transparent;
         }
 
-        .moon-overlay {
-            position: absolute;
-            top: 0;
-            width: 50%;
+        .moon-circle canvas {
+            width: 100%;
             height: 100%;
-            background: #f8f9fa;
+            display: block;
             border-radius: 50%;
-        }
-
-        .moon-overlay.left {
-            left: 0;
-        }
-
-        .moon-overlay.right {
-            right: 0;
         }
 
         .day-indicator {
@@ -1179,7 +1169,7 @@
                 </div>
                 <div class="moon-phase-visual">
                     <div class="moon-circle" id="moon-visual">
-                        <div class="moon-overlay" id="moon-overlay"></div>
+                        <canvas id="moon-canvas" width="120" height="120"></canvas>
                     </div>
                 </div>
                 <div class="card-content">
@@ -1284,6 +1274,15 @@
             document.documentElement.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
             updateThemeIcon(newTheme);
+            
+            // Update moon phase visualization with new theme colors
+            const cachedData = getCachedData();
+            if (cachedData && cachedData.moon) {
+                updateMoonPhaseVisual(
+                    cachedData.moon.phase_day_0_29,
+                    cachedData.moon.illumination_fraction_est
+                );
+            }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -1691,20 +1690,28 @@
 
             document.getElementById('moon-phase').textContent = data.moon.phase_name;
             document.getElementById('phase-day').textContent = `${data.moon.phase_day_0_29} of 29`;
-            const illuminationPercent = Math.round((data.moon.illumination_fraction_est || 0) * 100);
-            document.getElementById('illumination-percent').textContent = `${illuminationPercent}%`;
-            document.getElementById('illumination-fill').style.width = `${illuminationPercent}%`;
+            const illuminationValue = (data.moon.illumination_fraction_est || 0) * 100;
+            const illuminationPercentText = `${illuminationValue.toFixed(1)}%`;
+            document.getElementById('illumination-percent').textContent = illuminationPercentText;
+            document.getElementById('illumination-fill').style.width = `${Math.max(0, Math.min(illuminationValue, 100)).toFixed(1)}%`;
 
             // Update moonrise and moonset
             document.getElementById('moonrise').textContent = formatTime(data.moon.moonrise);
             document.getElementById('moonset').textContent = formatTime(data.moon.moonset);
 
             // Update next moon phases
-            document.getElementById('next-new-moon').textContent = formatDate(data.moon.next_new_moon);
-            document.getElementById('next-full-moon').textContent = formatDate(data.moon.next_full_moon);
+            const nextNewMoonEl = document.getElementById('next-new-moon');
+            const nextFullMoonEl = document.getElementById('next-full-moon');
+            nextNewMoonEl.textContent = formatDateTime(data.moon.next_new_moon);
+            nextNewMoonEl.title = formatDateTime(data.moon.next_new_moon, true);
+            nextFullMoonEl.textContent = formatDateTime(data.moon.next_full_moon);
+            nextFullMoonEl.title = formatDateTime(data.moon.next_full_moon, true);
 
             // Update moon phase visualization
-            updateMoonPhaseVisual(data.moon.phase_day_0_29);
+            updateMoonPhaseVisual(
+                data.moon.phase_day_0_29,
+                data.moon.illumination_fraction_est
+            );
 
             currentLocationLabel.textContent = `${formatCoordinate(data.query.lat, 'lat')}, ${formatCoordinate(data.query.lon, 'lon')} • ${data.timezone}`;
 
@@ -1715,42 +1722,104 @@
             updateSunArc(data.sun);
         }
 
-        function updateMoonPhaseVisual(phaseDay) {
-            const moonCircle = document.getElementById('moon-visual');
-            const moonOverlay = document.getElementById('moon-overlay');
-
-            // Phase day 0 = New Moon, 7 = First Quarter, 14 = Full Moon, 21 = Last Quarter
-            // Calculate the illumination angle
-            const phase = phaseDay / 29.53; // Normalize to 0-1
-
-            if (phaseDay === 0) {
-                // New Moon - all dark
-                moonCircle.style.background = '#2c3e50';
-                moonOverlay.style.display = 'none';
-            } else if (phaseDay === 14 || phaseDay === 15) {
-                // Full Moon - all light
-                moonCircle.style.background = '#f8f9fa';
-                moonOverlay.style.display = 'none';
-            } else if (phaseDay < 15) {
-                // Waxing (0-15) - light on right side, growing
-                moonCircle.style.background = 'linear-gradient(90deg, #2c3e50 50%, #f8f9fa 50%)';
-                moonOverlay.className = 'moon-overlay right';
-                moonOverlay.style.display = 'block';
-
-                // Calculate the scale for the overlay (creates the curve)
-                const scale = Math.abs(Math.cos(phase * Math.PI * 2));
-                moonOverlay.style.transform = `scaleX(${scale})`;
-                moonOverlay.style.background = phaseDay < 7 ? '#2c3e50' : '#f8f9fa';
-            } else {
-                // Waning (15-29) - light on left side, shrinking
-                moonCircle.style.background = 'linear-gradient(90deg, #f8f9fa 50%, #2c3e50 50%)';
-                moonOverlay.className = 'moon-overlay left';
-                moonOverlay.style.display = 'block';
-
-                const scale = Math.abs(Math.cos(phase * Math.PI * 2));
-                moonOverlay.style.transform = `scaleX(${scale})`;
-                moonOverlay.style.background = phaseDay < 22 ? '#f8f9fa' : '#2c3e50';
+        function hexToRgb(color) {
+            if (!color) {
+                return [255, 255, 255];
             }
+            let normalized = color.trim();
+            if (normalized.startsWith('#')) {
+                normalized = normalized.slice(1);
+            }
+            if (normalized.length === 3) {
+                normalized = normalized
+                    .split('')
+                    .map((ch) => ch + ch)
+                    .join('');
+            }
+            const value = parseInt(normalized, 16);
+            if (Number.isNaN(value)) {
+                return [255, 255, 255];
+            }
+            return [
+                (value >> 16) & 255,
+                (value >> 8) & 255,
+                value & 255,
+            ];
+        }
+
+        function mixChannel(start, end, ratio) {
+            const clamped = Math.max(0, Math.min(ratio, 1));
+            return Math.round(start + (end - start) * clamped);
+        }
+
+        function updateMoonPhaseVisual(phaseDay, illuminationFraction) {
+            const canvas = document.getElementById('moon-canvas');
+            if (!canvas) {
+                return;
+            }
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                return;
+            }
+
+            const deviceRatio = window.devicePixelRatio || 1;
+            const targetSize = Math.max(canvas.clientWidth, 1) * deviceRatio;
+            if (canvas.width !== targetSize || canvas.height !== targetSize) {
+                canvas.width = targetSize;
+                canvas.height = targetSize;
+            }
+
+            const illumination = Math.max(
+                0,
+                Math.min(typeof illuminationFraction === 'number' ? illuminationFraction : 0, 1)
+            );
+            const isWaxing = Number(phaseDay) <= 14;
+            const phaseAngle = Math.acos(Math.max(-1, Math.min(1, 1 - 2 * illumination)));
+
+            const isDarkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+            const darkColor = isDarkTheme ? '#0a0e1a' : '#2c3e50';
+            const lightColor = isDarkTheme ? '#e8eaed' : '#f8f9fa';
+            const darkRgb = hexToRgb(darkColor);
+            const lightRgb = hexToRgb(lightColor);
+
+            const sunVector = {
+                x: Math.sin(phaseAngle) * (isWaxing ? 1 : -1),
+                z: -Math.cos(phaseAngle),
+            };
+
+            const size = canvas.width;
+            const radius = size / 2;
+            const center = radius;
+            const image = ctx.createImageData(size, size);
+            const pixels = image.data;
+
+            for (let y = 0; y < size; y += 1) {
+                for (let x = 0; x < size; x += 1) {
+                    const dx = x + 0.5 - center;
+                    const dy = y + 0.5 - center;
+                    const distanceSq = dx * dx + dy * dy;
+                    const index = (y * size + x) * 4;
+
+                    if (distanceSq > radius * radius) {
+                        pixels[index + 3] = 0;
+                        continue;
+                    }
+
+                    const dz = Math.sqrt(radius * radius - distanceSq);
+                    const nx = dx / radius;
+                    const nz = dz / radius;
+                    const dot = nx * sunVector.x + nz * sunVector.z;
+                    const intensity = dot > 0 ? Math.pow(dot, 0.6) : 0;
+
+                    pixels[index] = mixChannel(darkRgb[0], lightRgb[0], intensity);
+                    pixels[index + 1] = mixChannel(darkRgb[1], lightRgb[1], intensity);
+                    pixels[index + 2] = mixChannel(darkRgb[2], lightRgb[2], intensity);
+                    pixels[index + 3] = 255;
+                }
+            }
+
+            ctx.putImageData(image, 0, 0);
         }
 
         function updateSunArc(sunData) {
@@ -1854,6 +1923,31 @@
                 return 'N/A';
             }
             return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function formatDateTime(dateTimeStr, includeSeconds = false) {
+            if (!dateTimeStr) {
+                return 'N/A';
+            }
+            const parsed = new Date(dateTimeStr);
+            if (Number.isNaN(parsed.getTime())) {
+                return 'N/A';
+            }
+            const options = {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            };
+            if (includeSeconds) {
+                options.second = '2-digit';
+            }
+            if (currentTimezone) {
+                options.timeZone = currentTimezone;
+            }
+            return parsed.toLocaleString([], options);
         }
 
         function formatDate(dateStr) {

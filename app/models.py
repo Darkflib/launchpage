@@ -65,8 +65,8 @@ class MoonInfo(BaseModel):
     phase_name: str
     illumination_fraction_est: float = Field(..., ge=0.0, le=1.0)  # heuristic
     elevation_series: Optional[Dict[str, float]] = None
-    next_new_moon: Optional[Date] = None
-    next_full_moon: Optional[Date] = None
+    next_new_moon: Optional[datetime] = None
+    next_full_moon: Optional[datetime] = None
     moonrise: Optional[datetime] = None
     moonset: Optional[datetime] = None
 
