@@ -691,6 +691,8 @@ async def get_weather(
                     "aqi": "no",
                 }
 
+            logger.debug("Requesting weather data from %s with params %s", url, params)
+
             response = await client.get(url, params=params)
             response.raise_for_status()
             data = response.json()

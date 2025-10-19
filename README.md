@@ -203,7 +203,7 @@ docker run -p 8000:8000 -e WEATHERAPI_KEY=your_key astro-api
 - [ ] Batch endpoint for multiple locations (`POST /astro/batch`)
 - [ ] Customizable twilight depression angles
 - [ ] Astronomy image of the day widget
-- [ ] Moon arc visualization (similar to sun arc)
+- [x] Moon arc visualization (similar to sun arc)
 - [ ] Export/share feature for astronomical data
 - [ ] Customizable units (metric/imperial toggle)
 
@@ -213,3 +213,11 @@ docker run -p 8000:8000 -e WEATHERAPI_KEY=your_key astro-api
 - ✅ **Dark mode**: Full dark theme support with toggle button and localStorage persistence
 - ✅ **Weather tooltips**: Hover tooltips showing alternate units (mph, knots, inHg)
 - ✅ **Dual temperature display**: Shows both Celsius and Fahrenheit for current weather and forecasts
+
+## Docker
+
+A `Dockerfile` is included for containerized deployment:
+
+```bash
+docker buildx build --sbom=true --provenance=true --push --platform linux/arm64,linux/amd64 -t darkflib/launchpage:latest .
+```
