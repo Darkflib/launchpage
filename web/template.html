@@ -51,6 +51,7 @@
             --timezone-badge-bg: rgba(74, 111, 165, 0.1);
             --primary-tint: rgba(74, 111, 165, 0.05);
             --primary-tint-strong: rgba(74, 111, 165, 0.1);
+            --warning-tint: rgba(255, 193, 7, 0.18);
             --shadow-strong: 0 8px 20px rgba(0, 0, 0, 0.15);
             --shadow-small: 0 2px 6px rgba(0, 0, 0, 0.15);
             --shadow-deep: 0 4px 20px rgba(0, 0, 0, 0.3);
@@ -102,6 +103,7 @@
             --timezone-badge-bg: rgba(139, 164, 206, 0.18);
             --primary-tint: rgba(107, 137, 186, 0.12);
             --primary-tint-strong: rgba(107, 137, 186, 0.22);
+            --warning-tint: rgba(255, 214, 102, 0.24);
             --shadow-strong: 0 8px 20px rgba(0, 0, 0, 0.45);
             --shadow-small: 0 2px 6px rgba(0, 0, 0, 0.35);
             --shadow-deep: 0 4px 20px rgba(0, 0, 0, 0.6);
@@ -176,6 +178,12 @@
             background: var(--glass-10);
             border-radius: 30px;
             font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .health-status.ok {
+            background: var(--glass-10);
+            color: var(--text-primary);
         }
 
         .health-dot {
@@ -183,6 +191,28 @@
             height: 12px;
             border-radius: 50%;
             background: var(--success);
+        }
+
+        .health-status.ok .health-dot {
+            background: var(--success);
+        }
+
+        .health-status.warning {
+            background: var(--warning-tint);
+            color: var(--dark);
+        }
+
+        .health-status.warning .health-dot {
+            background: var(--warning);
+        }
+
+        .health-status.error {
+            background: var(--danger-tint);
+            color: var(--danger);
+        }
+
+        .health-status.error .health-dot {
+            background: var(--danger);
         }
 
         .main-content {
@@ -330,7 +360,7 @@
         }
 
         .time-group {
-            background: var(--glass-40);
+            background: var(--primary-tint);
             border-radius: 10px;
             padding: 15px;
             transition: all 0.3s ease;
@@ -626,7 +656,7 @@
         }
 
         .link-card {
-            background: var(--glass-10);
+            background: var(--primary-tint);
             border-radius: var(--border-radius);
             padding: 20px;
             text-align: center;
@@ -636,7 +666,7 @@
         }
 
         .link-card:hover {
-            background: var(--glass-15);
+            background: var(--card-bg * 1.1);
             transform: translateY(-3px);
         }
 
@@ -649,11 +679,12 @@
         .link-name {
             font-weight: 600;
             margin-bottom: 8px;
+            color: var(--primary);
         }
 
         .link-url {
             font-size: 0.85rem;
-            color: var(--text-glass-70);
+            color: var(--secondary);
             text-decoration: none;
         }
 
@@ -943,9 +974,9 @@
                 <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">
                     <i class="fas fa-sun" id="theme-icon"></i>
                 </button>
-                <div class="health-status">
-                    <div class="health-dot"></div>
-                    <span>API Status: Healthy</span>
+                <div class="health-status" id="api-status">
+                    <div class="health-dot" id="health-dot"></div>
+                    <span id="health-text" aria-live="polite">API Status: Checking…</span>
                 </div>
             </div>
         </header>
@@ -1308,6 +1339,8 @@
         const errorContainer = document.getElementById('error-container');
         const linksContainer = document.getElementById('links-container');
         const currentLocationLabel = document.querySelector('.current-location span');
+        const healthStatusEl = document.getElementById('api-status');
+        const healthText = document.getElementById('health-text');
 
         let refreshTimerId = null;
         let isFetching = false;
@@ -1318,9 +1351,13 @@
         let lastWeatherUpdate = null;
         let lastAstroUpdate = null;
         let currentSunData = null; // Store sun data for real-time position updates
+        let healthCheckTimer = null;
+        let healthCheckInFlight = false;
         const CACHE_KEY = 'astro_dashboard_cache';
         const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours for sun/moon data
         const WEATHER_REFRESH_MS = 15 * 60 * 1000; // 15 minutes for weather data
+        const HEALTH_CHECK_INTERVAL_MS = 60 * 1000; // 1 minute health checks
+        const HEALTH_TIMEOUT_MS = 5 * 1000; // 5 second timeout for health checks
 
         // Dark mode initialization
         function initTheme() {
@@ -1355,10 +1392,109 @@
             }
         }
 
+        function setHealthState(state, message, tooltip) {
+            if (!healthStatusEl || !healthText) {
+                return;
+            }
+            healthStatusEl.classList.remove('ok', 'warning', 'error');
+            if (state) {
+                healthStatusEl.classList.add(state);
+                healthStatusEl.dataset.state = state;
+            } else {
+                delete healthStatusEl.dataset.state;
+            }
+            healthText.textContent = message;
+            if (tooltip) {
+                healthStatusEl.setAttribute('title', tooltip);
+            } else {
+                healthStatusEl.removeAttribute('title');
+            }
+        }
+
+        async function checkHealthStatus() {
+            if (!healthStatusEl) {
+                return;
+            }
+            if (healthCheckInFlight) {
+                return;
+            }
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+            const checkedAt = new Date();
+            healthCheckInFlight = true;
+            try {
+                const response = await fetch('/health', {
+                    signal: controller.signal,
+                    cache: 'no-store',
+                });
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    throw new Error(`Health check failed with status ${response.status}`);
+                }
+
+                const payload = await response.json();
+                const statusRaw = payload.status ? String(payload.status) : '';
+                const normalizedStatus = statusRaw.trim().toLowerCase();
+                const timestamp = checkedAt.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                });
+                const tooltipParts = [`Last checked ${timestamp}`];
+                if (payload.app) {
+                    tooltipParts.push(`App: ${payload.app}`);
+                }
+
+                if (normalizedStatus === 'ok') {
+                    setHealthState('ok', 'API Status: Healthy', tooltipParts.join(' • '));
+                } else {
+                    const baseStatus =
+                        normalizedStatus.length > 0 ? normalizedStatus : 'unknown';
+                    const readable = baseStatus
+                        .split(/[_-\s]+/)
+                        .filter(Boolean)
+                        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join(' ');
+                    setHealthState(
+                        'warning',
+                        `API Status: ${readable}`,
+                        tooltipParts.join(' • ')
+                    );
+                }
+            } catch (error) {
+                const timestamp = checkedAt.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                });
+                setHealthState(
+                    'error',
+                    'API Status: Offline',
+                    `Last attempt ${timestamp} • ${error.message}`
+                );
+            } finally {
+                clearTimeout(timeoutId);
+                healthCheckInFlight = false;
+            }
+        }
+
+        function startHealthMonitor() {
+            if (!healthStatusEl) {
+                return;
+            }
+            if (healthCheckTimer) {
+                clearInterval(healthCheckTimer);
+            }
+            checkHealthStatus();
+            healthCheckTimer = setInterval(checkHealthStatus, HEALTH_CHECK_INTERVAL_MS);
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             initTheme();
             initDashboard();
             startClock();
+            startHealthMonitor();
 
             // Add theme toggle event listener
             document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
