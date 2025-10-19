@@ -1848,8 +1848,20 @@
             sunPosition.style.opacity = '1';
 
             const nowTime = now.getTime();
-            const sunriseTime = sunrise.getTime();
-            const sunsetTime = sunset.getTime();
+            const dayMs = 24 * 60 * 60 * 1000;
+            let sunriseTime = sunrise.getTime();
+            let sunsetTime = sunset.getTime();
+
+            // Align sunrise and sunset to the current time cycle so that the arc resets
+            // correctly after midnight without requiring a fresh data fetch.
+            while (nowTime < sunriseTime) {
+                sunriseTime -= dayMs;
+                sunsetTime -= dayMs;
+            }
+            while (nowTime >= sunriseTime + dayMs) {
+                sunriseTime += dayMs;
+                sunsetTime += dayMs;
+            }
 
             // Calculate position along the arc (0 = sunrise, 0.5 = noon, 1 = sunset)
             let progress;
